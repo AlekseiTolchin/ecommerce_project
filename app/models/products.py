@@ -1,6 +1,7 @@
-from app.backend.db import Base
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Float
 from sqlalchemy.orm import relationship
+
+from app.backend.db import Base
 
 
 class Product(Base):
@@ -13,5 +14,8 @@ class Product(Base):
     price = Column(Integer)
     image_url = Column(String)
     stock = Column(Float)
+    category_id = Column(Integer, ForeignKey('categories.id'))
     rating = Column(Float)
     is_active = Column(Boolean, default=True)
+
+    category = relationship('Category', back_populates='products')
