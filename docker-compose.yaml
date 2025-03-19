@@ -1,0 +1,31 @@
+volumes:
+  db_data:
+
+services:
+  web:
+    container_name: ecommerce
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    command: uvicorn app.main:app --host 0.0.0.0
+
+  db:
+    image: postgres:13.0-alpine
+    container_name: postgres-db
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5434"
