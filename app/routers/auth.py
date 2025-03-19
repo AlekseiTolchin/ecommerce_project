@@ -1,25 +1,31 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, status, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import select, insert
 from typing import Annotated
-from sqlalchemy.ext.asyncio import AsyncSession
-from passlib.context import CryptContext
 
-from app.config import SECRET_KEY, ALGORITHM
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from passlib.context import CryptContext
+from sqlalchemy import insert, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.backend.db_depends import get_db
+from app.config import JWT_ALGORITHM, JWT_SECRET_KEY
 from app.models.user import User
 from app.schemas import CreateUser
-from app.backend.db_depends import get_db
-import jwt
+
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 
-async def get_authenticate_user(db: Annotated[AsyncSession, Depends(get_db)], username: str, password: str):
+async def get_authenticate_user(
+        db: Annotated[AsyncSession, Depends(get_db)],
+        username: str,
+        password: str
+):
     user = await db.scalar(select(User).where(User.username == username))
-    if not user or not bcrypt_context.verify(password, user.hashed_password) or user.is_active == False:
+    if not user or not bcrypt_context.verify(password, user.hashed_password) or not user.is_active:
         raise HTTPException (
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -28,8 +34,14 @@ async def get_authenticate_user(db: Annotated[AsyncSession, Depends(get_db)], us
     return user
 
 
-async def create_access_token(username: str, user_id: int, is_admin: bool, is_supplier: bool, is_customer: bool,
-                              expires_delta: timedelta):
+async def create_access_token(
+        username: str,
+        user_id: int,
+        is_admin: bool,
+        is_supplier: bool,
+        is_customer: bool,
+        expires_delta: timedelta
+):
     payload = {
         'sub': username,
         'id': user_id,
@@ -40,12 +52,12 @@ async def create_access_token(username: str, user_id: int, is_admin: bool, is_su
     }
 
     payload['exp'] = int(payload['exp'].timestamp())
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         username: str | None = payload.get('sub')
         user_id: int | None = payload.get('id')
         is_admin: bool | None = payload.get('is_admin')
@@ -99,7 +111,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 
 
 @router.post('/', status_code=status.HTTP_201_CREATED)
-async def create_user(db: Annotated[AsyncSession, Depends(get_db)], create_user: CreateUser):
+async def create_user(
+        db: Annotated[AsyncSession, Depends(get_db)],
+        create_user: CreateUser
+):
     await db.execute(insert(User).values(
         first_name=create_user.first_name,
         last_name=create_user.last_name,
@@ -116,7 +131,10 @@ async def create_user(db: Annotated[AsyncSession, Depends(get_db)], create_user:
 
 
 @router.post('/token')
-async def login(db: Annotated[AsyncSession, Depends(get_db)], form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+async def login(
+        db: Annotated[AsyncSession, Depends(get_db)],
+        form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+):
     user = await get_authenticate_user(db, form_data.username, form_data.password)
 
     token = await create_access_token(user.username, user.id, user.is_admin, user.is_supplier, user.is_customer,

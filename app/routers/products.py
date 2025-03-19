@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from slugify import slugify
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
-from typing import Annotated
-from sqlalchemy import insert, select, update
-from slugify import slugify
 
 from app.backend.db_depends import get_db
-from app.schemas import CreateProduct
-from app.models.products import Product
 from app.models.category import Category
+from app.models.products import Product
 from app.routers.auth import get_current_user
+from app.schemas import CreateProduct
+
 
 router = APIRouter(prefix='/products', tags=['products'], dependencies=[Depends(get_current_user)])
 
@@ -20,8 +22,8 @@ async def get_all_products(db: Annotated[AsyncSession, Depends(get_db)]):
         select(Product)
         .join(Category)
         .where(
-            Product.is_active == True,
-            Category.is_active == True,
+            Product.is_active,
+            Category.is_active,
         )
     )
 
@@ -73,7 +75,7 @@ async def get_product_by_category(db: Annotated[AsyncSession, Depends(get_db)], 
     product_category = await db.scalars(
         select(Product)
         .where(Product.category_id.in_(categories_and_subcategories),
-               Product.is_active == True,
+               Product.is_active,
                Product.stock > 0
                )
     )
@@ -84,7 +86,12 @@ async def get_product_by_category(db: Annotated[AsyncSession, Depends(get_db)], 
 @router.get('/details/{product_slug}')
 async def get_product_details(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str):
     product = await db.scalar(
-        select(Product).where(Product.slug == product_slug, Product.is_active ==True, Product.stock > 0))
+        select(Product).where(
+            Product.slug == product_slug,
+            Product.is_active,
+            Product.stock > 0,
+        )
+    )
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -94,7 +101,11 @@ async def get_product_details(db: Annotated[AsyncSession, Depends(get_db)], prod
 
 
 @router.put('/{product_slug}')
-async def update_product(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str, update_product: CreateProduct):
+async def update_product(
+        db: Annotated[AsyncSession, Depends(get_db)],
+        product_slug: str,
+        update_product: CreateProduct
+):
     product = await db.scalar(select(Product).where(Product.slug == product_slug))
     if not product:
         raise HTTPException(
@@ -130,7 +141,7 @@ async def delete_product(db: Annotated[Session, Depends(get_db)], product_slug: 
         select(Product)
         .where(
             Product.slug == product_slug,
-            Product.is_active == True,
+            Product.is_active,
         )
     )
     if not product:
