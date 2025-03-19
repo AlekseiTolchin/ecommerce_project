@@ -9,8 +9,9 @@ from app.backend.db_depends import get_db
 from app.schemas import CreateProduct
 from app.models.products import Product
 from app.models.category import Category
+from app.routers.auth import get_current_user
 
-router = APIRouter(prefix='/products', tags=['products'])
+router = APIRouter(prefix='/products', tags=['products'], dependencies=[Depends(get_current_user)])
 
 
 @router.get('/')
